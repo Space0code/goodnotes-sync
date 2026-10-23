@@ -18,6 +18,7 @@ Usage:
 """
 import argparse
 import contextlib
+import ctypes
 import datetime as dt
 import email.utils
 import fcntl
@@ -163,6 +164,21 @@ def keychain(service, account=None):
     if r.returncode != 0:
         raise RuntimeError(f"Keychain item '{service}' not found")
     return r.stdout.rstrip("\n")
+
+
+def allow_downloads():
+    """Let this process read files that Google Drive (or iCloud) only streams.
+
+    Background jobs may not download "dataless" placeholders by default; reading one then fails with
+    EDEADLK ("Resource deadlock avoided"). Same as setiopolicy_np(IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES,
+    IOPOL_SCOPE_PROCESS, IOPOL_MATERIALIZE_DATALESS_FILES_ON) in C.
+    """
+    try:
+        libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
+        if libc.setiopolicy_np(3, 0, 2) != 0:
+            log.warning("setiopolicy_np failed: errno %d", ctypes.get_errno())
+    except (OSError, AttributeError) as e:
+        log.warning("cannot allow downloads of streamed files: %s", e)
 
 
 def online(host="www.googleapis.com"):
@@ -811,6 +827,7 @@ def main():
     ap.add_argument("-v", "--verbose", action="store_true")
     a = ap.parse_args()
     setup_logging(a.verbose or a.cmd != "tick")
+    allow_downloads()
     if a.cmd == "tick":
         return tick()
     if a.cmd == "test-ntfy":
