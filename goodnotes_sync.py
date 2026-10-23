@@ -221,7 +221,9 @@ def map_remote(path):
     folder (e.g. just imported into the library root) maps by its course prefix ('RL · Lecture05').
     """
     parts = [p for p in path.split("/") if p]
-    prefixed, name = strip_prefix(os.path.splitext(parts[-1])[0])
+    # Goodnotes names emailed imports after the attachment incl. its extension: 'SPA · X.pdf' -> 'SPA · X.pdf.pdf'
+    stem = re.sub(r"(\.pdf)+$", "", parts[-1], flags=re.I)
+    prefixed, name = strip_prefix(stem)
     for i, part in enumerate(parts[:-1]):
         for c in course_folders():
             if norm(part) in course_aliases(c):

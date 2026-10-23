@@ -79,6 +79,13 @@ class Naming(unittest.TestCase):
         self.assertEqual(G.map_remote("Home/Inbox/SR - S04SR.pdf"), ("symbolic_reasoning", ["S04SR"]))
         self.assertEqual(G.map_remote("AS: Theory 1.pdf"), ("autonomous_systems", ["Theory 1"]))
 
+    def test_emailed_import_double_extension(self):
+        self.assertEqual(G.map_remote("SR · Lectura_practica_soluciones.pdf.pdf"),
+                         ("symbolic_reasoning", ["Lectura_practica_soluciones"]))
+        self.assertEqual(G.map_remote("EMAI/Symbolic reasoning/SR · Soluciones (2).pdf.pdf"),
+                         ("symbolic_reasoning", ["Soluciones (2)"]))
+        self.assertEqual(G.map_remote("RL · v1.2 notes.pdf"), ("reinforcement_learning", ["v1.2 notes"]))
+
     def test_folder_wins_and_keeps_subfolders(self):
         self.assertEqual(G.map_remote("EMAI/Reinforcement learning/Lectures/RL · L5.pdf"),
                          ("reinforcement_learning", ["Lectures", "L5"]))
