@@ -1,0 +1,15 @@
+{
+ "materials": "~/Library/Mobile Documents/com~apple~CloudDocs/Aula Global",
+ "goodnotes_email": "",
+ "gmail": "you@gmail.com",
+ "courses": {
+  "reinforcement_learning": {"prefix": "RL", "goodnotes_folders": ["Reinforcement learning"]},
+  "symbolic_reasoning": {"prefix": "SR", "goodnotes_folders": ["Symbolic reasoning"]}
+ },
+ "import_folders": ["slides", "lectures", "exercises"],
+ "rclone_remote": "gdrive:Goodnotes",
+ "export_after_lecture_minutes": [15, 60],
+ "export_times": ["20:00"],
+ "calendar_url": "",
+ "notify": true
+}
