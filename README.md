@@ -60,6 +60,7 @@ Notebooks that match neither rule (personal notebooks, for example) are never do
    ```bash
    brew install --cask google-drive && open -a "Google Drive"
    ```
+   Run this in Terminal.app. If `sudo` can't ask for your password (for example in a non-interactive shell), open the downloaded package in the macOS Installer instead: mount `~/Library/Caches/Homebrew/downloads/*GoogleDrive.dmg` and open `GoogleDrive.pkg`.
 4. **Mac: install:**
    ```bash
    git clone https://github.com/Space0code/goodnotes-sync.git && cd goodnotes-sync
@@ -79,6 +80,12 @@ Notebooks that match neither rule (personal notebooks, for example) are never do
    /usr/bin/python3 "$A" test-import "<materials>/<course>/slides/L1_auto.pdf"
    ```
 7. **Optional, recommended (iPad Shortcuts → Automation → Time of Day, 19:45, Run Immediately → Open App → Goodnotes).** iPadOS gives apps little background time, so the Auto Backup queue empties most reliably while Goodnotes is open. This makes sure the day's notes are uploaded before the 20:00 export. During lectures Goodnotes is open anyway.
+8. **Existing notebooks (once).** Auto Backup uploads a notebook only when it changes, so notebooks you won't touch again never reach Drive. In Goodnotes, select your course folder and export it as **PDF** (e.g. AirDrop it to the Mac), then:
+   - Place the PDFs in `handwritten/`. `seed` uses a Goodnotes backup zip (Settings › Export backup) to find each notebook's folders:
+     ```bash
+     /usr/bin/python3 "$A" seed ~/Downloads/<Folder>.zip --layout ~/Downloads/"Backup <date>.zip"
+     ```
+   - Optionally, copy the extracted export into the Drive backup folder under a name matching `archive_folders`, e.g. `Goodnotes/<Folder>-manual-backup-<date>/`. Drive then has every notebook. The archive copy is used only for notebooks without a live Auto Backup copy, and archive files identical to what `seed` placed are adopted without downloading.
 
 The first time a PowerPoint file needs converting, macOS may ask whether `goodnotes-sync` may control Microsoft PowerPoint; click **OK**. If the conversion is refused, you get a push and can allow it later under Privacy & Security → Automation.
 
@@ -123,7 +130,7 @@ Logs: `~/Library/Logs/goodnotes-sync/goodnotes-sync.log`. State: `~/Library/Appl
 ## Limitations
 - Imported files land in the root of your Goodnotes library: Email to Goodnotes can't target a folder, and Goodnotes offers no background way to move documents. The course prefix shows where each one belongs; move them into `EMAI/<course>/…` yourself, and the exported PDFs follow.
 - Goodnotes fetches emailed imports when the app is open, usually within a minute or two.
-- How quickly a change on the iPad shows up depends on when Goodnotes uploads it. That happens immediately while the app is open, and less predictably in the background (see setup step 6).
+- How quickly a change on the iPad shows up depends on when Goodnotes uploads it. That happens immediately while the app is open, and less predictably in the background (see setup step 7).
 - Deletions and renames in Goodnotes are not mirrored (moves are). A renamed notebook is exported under its new name, and the old PDF stays.
 
 ## Development
