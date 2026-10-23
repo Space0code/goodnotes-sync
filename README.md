@@ -93,6 +93,7 @@ The first time a PowerPoint file needs converting, macOS may ask whether `goodno
 | `only_auto_files` | import only files aula-sync wrote (`*_auto.*`), not your own copies | `true` |
 | `backup_folder` | local path of the Auto Backup folder; empty = auto-detect `~/Library/CloudStorage/GoogleDrive-*/My Drive/<backup_folder_name>` | `""` |
 | `backup_folder_name` | the folder name set in Goodnotes' Auto Backup | `"Goodnotes"` |
+| `archive_folders` | glob patterns of folders inside the backup folder that hold one-time copies, e.g. a manual PDF export of old notebooks that Auto Backup never uploads because they don't change. They're used only for notebooks without a live Auto Backup copy; the live copy always wins, whatever its date | `["*manual-backup*", "*manual backup*"]` |
 | `export_after_lecture_minutes` | export this many minutes after each lecture ends | `[15, 60]` |
 | `export_times` | daily export times (local) | `["20:00"]` |
 | `calendar_url` | iCalendar feed of your lectures; defaults to aula-sync's `calendar_url` | aula-sync's |

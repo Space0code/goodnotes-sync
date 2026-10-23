@@ -411,6 +411,54 @@ class Seed(Base):
                          b"from auto backup")
 
 
+class ArchiveFolders(Base):
+    """A one-time export copied into the backup folder next to the live Auto Backup tree."""
+    ARCH = "EMAI-manual-backup-23-october-2026/EMAI/Reinforcement Learning/"
+    LIVE = "EMAI/Reinforcement Learning/"
+
+    def run_export(self, state, remote):
+        def fetch(path, tmp):
+            with open(tmp, "wb") as f:
+                f.write(remote[path][0])
+        self.fetched = []
+        self.patch(fetch=lambda p, t: (self.fetched.append(p), fetch(p, t)),
+                   remote_listing=lambda: [{"Path": p, "Size": len(d), "ModTime": m} for p, (d, m) in remote.items()])
+        return G.export_changed(state)
+
+    def test_archive_used_until_a_live_copy_exists_even_if_older(self):
+        state = {}
+        remote = {self.ARCH + "L2.pdf": (b"archived ink", "2026-10-23T12:30:00+00:00")}
+        self.assertEqual(self.run_export(state, remote), ["reinforcement_learning/handwritten/L2.pdf"])
+        remote[self.LIVE + "L2.pdf"] = (b"live ink, newer content", "2026-10-23T12:00:00+00:00")  # older date
+        self.assertEqual(self.run_export(state, remote), ["reinforcement_learning/handwritten/L2.pdf"])
+        dest = os.path.join(self.materials, "reinforcement_learning/handwritten/L2.pdf")
+        self.assertEqual(read(dest), b"live ink, newer content")
+        self.assertEqual(self.handwritten(), ["L2.pdf"])
+        self.assertEqual(self.run_export(state, remote), [])
+        remote[self.LIVE + "L2.pdf"] = (b"live ink, edited again", "2026-10-24T09:00:00+00:00")
+        self.assertEqual(self.run_export(state, remote), ["reinforcement_learning/handwritten/L2.pdf"])
+        self.assertEqual(self.handwritten(), ["L2.pdf"])
+
+    def handwritten(self):
+        return sorted(os.listdir(os.path.join(self.materials, "reinforcement_learning/handwritten")))
+
+    def test_seeded_file_is_adopted_without_download(self):
+        dest = self.write("reinforcement_learning/handwritten/L3.pdf", data=b"compressed seed")
+        state = {"exports": {self.LIVE + "L3.pdf": {
+            "fingerprint": "seed", "md5": hashlib.md5(b"compressed seed").hexdigest(), "size": 15,
+            "dest": "reinforcement_learning/handwritten/L3.pdf", "time": 0, "source_size": 18}}}
+        remote = {self.ARCH + "L3.pdf": (b"original seed file", "2026-10-23T12:30:00+00:00")}  # 18 bytes
+        self.assertEqual(self.run_export(state, remote), [])
+        self.assertEqual(self.fetched, [])
+        self.assertEqual(read(dest), b"compressed seed")
+        self.assertEqual(list(state["exports"]), [self.ARCH + "L3.pdf"])
+
+    def test_archived_names_match(self):
+        self.assertTrue(G.archived("EMAI-manual-backup-23-october-2026/EMAI/X/a.pdf"))
+        self.assertTrue(G.archived("Old/Manual Backup 2025/a.pdf"))
+        self.assertFalse(G.archived("EMAI/Reinforcement Learning/manual-backup.pdf"))
+
+
 class LocalDriveBackup(Base):
     """Reading Goodnotes Auto Backup from Google Drive for desktop's folder, without patched listing/fetch."""
 

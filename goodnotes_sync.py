@@ -22,6 +22,7 @@ import ctypes
 import datetime as dt
 import email.utils
 import fcntl
+import fnmatch
 import glob
 import hashlib
 import json
@@ -89,6 +90,9 @@ HANDWRITTEN = SETTINGS.get("handwritten_folder", "handwritten")
 CLOUD_STORAGE = os.path.join(HOME, "Library/CloudStorage")
 BACKUP_FOLDER = SETTINGS.get("backup_folder", "")
 BACKUP_NAME = SETTINGS.get("backup_folder_name", "Goodnotes")
+# folders (glob patterns, any level) inside the backup folder holding one-time copies, e.g. a manual export of
+# notebooks Auto Backup never uploads because they no longer change; the live Auto Backup copy always wins
+ARCHIVE_FOLDERS = SETTINGS.get("archive_folders", ["*manual-backup*", "*manual backup*"])
 CALENDAR_URL = SETTINGS.get("calendar_url") or load_json(AULA_SETTINGS, {}).get("calendar_url", "")
 AFTER_LECTURE = SETTINGS.get("export_after_lecture_minutes", [15, 60])
 EXPORT_TIMES = SETTINGS.get("export_times", ["20:00"])
@@ -515,25 +519,52 @@ def same_slot(rec_dest, dest):
     return rec_dest == stem + ".pdf" or bool(re.fullmatch(re.escape(stem) + r" \(\d+\)\.pdf", rec_dest))
 
 
+def archived(path):
+    """True if a backed-up PDF sits in an archive folder (a one-time copy, see ARCHIVE_FOLDERS)."""
+    return any(fnmatch.fnmatch(part.casefold(), pat.casefold()) for part in path.split("/")[:-1]
+               for pat in ARCHIVE_FOLDERS)
+
+
+def preference(entry):
+    """Sort key: a live Auto Backup copy beats an archived one; then the newer one wins."""
+    return not archived(entry["Path"]), entry["ModTime"]
+
+
+def adopt_seed(e, fp, dest, exports):
+    """If archived entry `e` is the very PDF `seed` placed at `dest` (same size as its source), take it over as
+    that file's record without downloading it again. Returns True when adopted."""
+    rel = os.path.relpath(dest, MATERIALS)
+    for key, rec in list(exports.items()):
+        if rec.get("fingerprint") == "seed" and rec.get("dest") == rel and rec.get("source_size") == e["Size"] \
+                and unchanged_since_written(dest, rec):
+            exports[e["Path"]] = {**rec, "fingerprint": fp, "time": time.time()}
+            del exports[key]
+            return True
+    return False
+
+
 def plan_export(listing, state):
     """[(entry, fingerprint, dest)] of notebooks whose PDF changed since the last export, plus unmapped paths."""
     exports = state.setdefault("exports", {})
-    newest, unmapped = {}, []
+    best, unmapped = {}, []
     for e in listing:
         m = map_remote(e["Path"])
         if not m:
             unmapped.append(e["Path"])
             continue
         dest = handwritten_dest(*m)
-        if dest in newest and newest[dest]["ModTime"] >= e["ModTime"]:
-            log.warning("%s and %s both map to %s; keeping the newer", newest[dest]["Path"], e["Path"], dest)
+        if dest in best and preference(best[dest]) >= preference(e):
+            if not (archived(e["Path"]) or archived(best[dest]["Path"])):
+                log.warning("%s and %s both map to %s; keeping the newer", best[dest]["Path"], e["Path"], dest)
             continue
-        newest[dest] = e
+        best[dest] = e
     todo = []
-    for dest, e in sorted(newest.items()):
+    for dest, e in sorted(best.items()):
         fp, rec = fingerprint(e), exports.get(e["Path"])
         if rec and rec["fingerprint"] == fp and same_slot(rec["dest"], dest) \
                 and os.path.lexists(os.path.join(MATERIALS, rec["dest"])):
+            continue
+        if not rec and archived(e["Path"]) and adopt_seed(e, fp, dest, exports):
             continue
         todo.append((e, fp, writable(dest, exports)))
     return todo, unmapped
@@ -555,10 +586,9 @@ def writable(dest, exports):
 
     So a file you put in handwritten/ yourself (or edited on the Mac) is never overwritten.
     """
-    def ours(path):
+    def ours(path):  # several records can name one file (an archived copy and its later live upload)
         rel = os.path.relpath(path, MATERIALS)
-        rec = next((r for r in exports.values() if r.get("dest") == rel), None)
-        return bool(rec) and unchanged_since_written(path, rec)
+        return any(r.get("dest") == rel and unchanged_since_written(path, r) for r in exports.values())
 
     stem = os.path.splitext(dest)[0]
     for cand in [dest] + [f"{stem} ({i}).pdf" for i in range(2, 1000)]:
@@ -705,7 +735,7 @@ def seed(source, state, layout_zip=None, dry=False):
                 shutil.copyfile(pdf, dest + ".part")
                 os.replace(dest + ".part", dest)
                 exports[key] = {"fingerprint": "seed", "md5": file_hash(dest, "md5"), "size": os.path.getsize(dest),
-                                "dest": drel, "time": time.time()}
+                                "dest": drel, "time": time.time(), "source_size": os.path.getsize(src)}
                 save_json(STATE, state)
                 placed.append(drel)
     for s in skipped:
