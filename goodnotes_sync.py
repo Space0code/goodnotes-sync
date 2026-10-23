@@ -8,7 +8,8 @@
        course is written to <materials>/<course>/handwritten/<name>.pdf and replaced in place when it changes.
 
 Usage:
-  goodnotes_sync.py tick                        launchd calls this every 5 min: import new files, export when due
+  goodnotes_sync.py tick                        launchd runs this right after aula-sync syncs and every 15 min in the
+                                                daytime: import new files, export when due
   goodnotes_sync.py import [--dry-run]          import new files now
   goodnotes_sync.py export [--dry-run]          pull changed notebooks now
   goodnotes_sync.py status                      courses, pending imports, notebook mapping, next exports
@@ -888,10 +889,13 @@ def tick():
         except OSError as e:  # e.g. interrupted while iCloud is busy: try again at the next tick
             log.warning("cannot read %s now: %s", MATERIALS, e)
             return
-        if not online():
-            return
         try:
-            import_new(state)
+            # only emailing files needs the network (finding nothing new or recording the baseline doesn't),
+            # and exports read Google Drive's local folder
+            if GOODNOTES_EMAIL and pending_imports(json.loads(json.dumps(state))) and not online():
+                log.info("offline: new files wait for the next run")
+            else:
+                import_new(state)
         except Exception as e:
             alert(state, "import", f"Import into Goodnotes failed:\n{e}\n\n{traceback.format_exc()[-1500:]}")
         now = dt.datetime.now(dt.timezone.utc)

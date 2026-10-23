@@ -1,6 +1,7 @@
 import datetime as dt
 import hashlib
 import os
+import plistlib
 import sys
 import tempfile
 import time
@@ -360,7 +361,61 @@ class Exports(Base):
                     self.assertIn(os.sep + "handwritten" + os.sep, p)
 
 
+class LaunchdPlist(unittest.TestCase):
+    def render(self, settings):
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with tempfile.TemporaryDirectory() as t:
+            sf = os.path.join(t, "settings.json")
+            with open(sf, "w") as f:
+                G.json.dump(settings, f)
+            out = G.subprocess.run(["/usr/bin/python3", "-I", os.path.join(repo, "launchd/render_plist.py"),
+                                    os.path.join(repo, "launchd/local.goodnotes-sync.plist"), sf, "/app dir", "/home"],
+                                   check=True, capture_output=True, text=True).stdout
+            p = os.path.join(t, "x.plist")
+            with open(p, "w") as f:
+                f.write(out)
+            G.subprocess.run(["/usr/bin/plutil", "-lint", p], check=True, capture_output=True)
+            with open(p, "rb") as f:
+                return plistlib.load(f)
+
+    def test_daytime_slots_and_watch(self):
+        with tempfile.TemporaryDirectory() as aula:
+            pl = self.render({"watch_path": os.path.join(aula, "state.json")})
+            slots = [(d["Hour"], d["Minute"]) for d in pl["StartCalendarInterval"]]
+            self.assertEqual(slots[0], (8, 0))
+            self.assertEqual(slots[-1], (21, 0))
+            self.assertEqual(len(slots), 13 * 4 + 1)
+            self.assertEqual(pl["WatchPaths"], [os.path.join(aula, "state.json")])
+            self.assertNotIn("StartInterval", pl)
+            self.assertEqual(pl["ProgramArguments"], ["/app dir/goodnotes-sync", "tick"])
+
+    def test_custom_window_and_no_aula_sync(self):
+        pl = self.render({"active_hours": ["09:30", "10:30"], "check_every_minutes": 30,
+                          "watch_path": "/nonexistent/aula-sync/state.json"})
+        self.assertEqual([(d["Hour"], d["Minute"]) for d in pl["StartCalendarInterval"]],
+                         [(9, 30), (10, 0), (10, 30)])
+        self.assertNotIn("WatchPaths", pl)
+
+
 class Tick(Base):
+    def test_nothing_to_do_does_not_touch_the_network(self):
+        self.patch(APP_DIR=self.tmp.name, LOCK=os.path.join(self.tmp.name, "lock"), GOODNOTES_EMAIL="x@goodnotes.email",
+                   online=lambda: self.fail("no network needed"), calendar_text=lambda: "",
+                   EXPORT_TIMES=[], AFTER_LECTURE=[])
+        G.save_json(G.STATE, {"baseline_done": 1, "last_export": time.time()})
+        G.tick()
+
+    def test_offline_new_file_waits(self):
+        sent = []
+        self.patch(APP_DIR=self.tmp.name, LOCK=os.path.join(self.tmp.name, "lock"), GOODNOTES_EMAIL="x@goodnotes.email",
+                   online=lambda: False, calendar_text=lambda: "", EXPORT_TIMES=[], AFTER_LECTURE=[],
+                   deliver=lambda *a: sent.append(a) or True)
+        G.save_json(G.STATE, {"baseline_done": 1, "last_export": time.time()})
+        self.write("symbolic_reasoning/lectures/S05_auto.pdf")
+        G.tick()
+        self.assertEqual(sent, [])
+        self.assertNotIn("symbolic_reasoning/lectures/S05_auto.pdf", G.load_json(G.STATE, {}).get("imports", {}))
+
     def test_transient_read_error_skips_the_tick(self):
         def interrupted(path):
             raise InterruptedError(4, "Interrupted system call", path)

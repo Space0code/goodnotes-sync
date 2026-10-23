@@ -7,7 +7,7 @@ Unattended two-way bridge between your course folder in iCloud Drive and **Goodn
 
 ```
 Aula Global ──aula-sync──▶ materials/RL/lectures/L5_auto.pdf          (originals, never touched)
-                                   │ new file (checked every 5 min)
+                                   │ new file (checked right after each aula-sync sync)
                                    ▼
                      Gmail ──▶ Email to Goodnotes ──▶ Goodnotes: "RL · L5"   ✍️ you write on the iPad
                                                             │ Auto Backup (PDF)
@@ -66,7 +66,10 @@ Notebooks that match neither rule (personal notebooks, for example) are never do
    git clone https://github.com/Space0code/goodnotes-sync.git && cd goodnotes-sync
    ./install.sh   # first run creates ~/Library/Application Support/goodnotes-sync/settings.json
    ```
-   Edit the settings (below) and run `./install.sh` again. It builds a small launcher binary and loads a launchd agent that runs it every 5 minutes.
+   Edit the settings (below) and run `./install.sh` again. It builds a small launcher binary and loads a launchd agent.
+   - The agent runs right after each aula-sync sync, because it watches aula-sync's `state.json`, so new slides go to Goodnotes within a minute or two.
+   - It also runs every 15 minutes between 08:00 and 21:00, which covers every lecture end and the 20:00 export. A slot missed while the Mac sleeps runs once on wake.
+   - Nothing runs at night, and a run with nothing to do doesn't touch the network.
 5. **Mac: let the agent into iCloud Drive.** macOS keeps background jobs out of `~/Library/Mobile Documents` until you allow them. Right after installing, a dialog appears: *"goodnotes-sync" would like to access files in iCloud Drive*. Click **Allow**. A second dialog asks the same for **Google Drive**; allow that too. The permission belongs to the small launcher binary only, not to Python as a whole. If you missed or declined the dialog, turn it on under System Settings → Privacy & Security → Files & Folders → goodnotes-sync → iCloud Drive. Alternatively, add the launcher to Full Disk Access:
    ```bash
    open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
@@ -103,6 +106,8 @@ The first time a PowerPoint file needs converting, macOS may ask whether `goodno
 | `archive_folders` | glob patterns of folders inside the backup folder that hold one-time copies, e.g. a manual PDF export of old notebooks that Auto Backup never uploads because they don't change. They're used only for notebooks without a live Auto Backup copy; the live copy always wins, whatever its date | `["*manual-backup*", "*manual backup*"]` |
 | `export_after_lecture_minutes` | export this many minutes after each lecture ends | `[15, 60]` |
 | `export_times` | daily export times (local) | `["20:00"]` |
+| `active_hours`, `check_every_minutes` | when the agent's scheduled checks run (local time, both ends included); keep the export times and lecture ends inside this window. Re-run `./install.sh` after changing them | `["08:00", "21:00"]`, `15` |
+| `watch_path` | file whose changes start an immediate run; aula-sync rewrites it after every sync | aula-sync's `state.json` |
 | `calendar_url` | iCalendar feed of your lectures; defaults to aula-sync's `calendar_url` | aula-sync's |
 | `notify` | push a summary after each import/export (errors are always pushed) | `true` |
 | `import_since` | local time like `"2026-10-22T15:00"`: on the first run, files changed after it are imported rather than only recorded (covers the gap between installing and allowing access) | first run's time |
@@ -123,7 +128,7 @@ goodnotes_sync.py seed EXPORT [--layout BACKUP.zip] [--dry-run]
                                                folders. Later Auto Backup uploads replace them in place.
 goodnotes_sync.py test-import FILE             email one file to Goodnotes
 goodnotes_sync.py test-ntfy                    send a test push
-goodnotes_sync.py tick                         what launchd runs every 5 min
+goodnotes_sync.py tick                         what launchd runs (after aula-sync syncs, and in the daytime slots)
 ```
 Logs: `~/Library/Logs/goodnotes-sync/goodnotes-sync.log`. State: `~/Library/Application Support/goodnotes-sync/state.json`.
 
