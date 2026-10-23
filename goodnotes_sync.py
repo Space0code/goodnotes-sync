@@ -636,7 +636,12 @@ def export_changed(state, dry=False):
             log.info("moved %s -> %s", old["dest"], rel)
             continue
         tmp = os.path.join(staging(), f"export-{os.getpid()}.pdf")
-        fetch(e["Path"], tmp)
+        try:
+            fetch(e["Path"], tmp)
+        except BaseException:
+            with contextlib.suppress(FileNotFoundError):
+                os.remove(tmp)  # don't leave a partial download in the cache
+            raise
         if (e.get("Hashes") or {}).get("md5") not in (None, file_hash(tmp, "md5")):
             os.remove(tmp)
             raise RuntimeError(f"checksum mismatch downloading {e['Path']}")

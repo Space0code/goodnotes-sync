@@ -338,6 +338,16 @@ class Exports(Base):
         self.run_export(state, {"EMAI/Reinforcement learning/Lectures/RL · L10.pdf": b"v1"})
         self.assertEqual(self.handwritten_files(), ["L10.pdf", "Lectures/L10.pdf"])
 
+    def test_failed_download_leaves_no_temp_file(self):
+        def broken(path, tmp):
+            with open(tmp, "wb") as f:
+                f.write(b"partial")
+            raise OSError(11, "Resource deadlock avoided")
+        self.patch(remote_listing=lambda: [self.entry("RL · L11.pdf", b"x")], fetch=broken)
+        with self.assertRaises(OSError):
+            G.export_changed({})
+        self.assertEqual(os.listdir(G.STAGING), [])
+
     def test_never_touches_originals(self):
         orig = self.write("reinforcement_learning/lectures/L8_auto.pdf", data=b"aula original")
         state = {}
