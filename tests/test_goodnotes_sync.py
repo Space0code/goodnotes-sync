@@ -79,6 +79,13 @@ class Naming(unittest.TestCase):
         self.assertEqual(G.map_remote("Home/Inbox/SR - S04SR.pdf"), ("symbolic_reasoning", ["S04SR"]))
         self.assertEqual(G.map_remote("AS: Theory 1.pdf"), ("autonomous_systems", ["Theory 1"]))
 
+    def test_underscore_or_tight_dash_is_part_of_the_name(self):
+        self.assertEqual(G.map_remote("EMAI/Reinforcement Learning/RL_emai_26_1_auto.pdf"),
+                         ("reinforcement_learning", ["RL_emai_26_1_auto"]))
+        self.assertEqual(G.map_remote("EMAI/Autonomous Systems/AS-Theory.pdf"), ("autonomous_systems", ["AS-Theory"]))
+        self.assertIsNone(G.map_remote("RL_notes.pdf"))
+        self.assertEqual(G.map_remote("RL – notes.pdf"), ("reinforcement_learning", ["notes"]))
+
     def test_emailed_import_double_extension(self):
         self.assertEqual(G.map_remote("SR · Lectura_practica_soluciones.pdf.pdf"),
                          ("symbolic_reasoning", ["Lectura_practica_soluciones"]))

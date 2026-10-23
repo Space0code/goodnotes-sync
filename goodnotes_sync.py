@@ -222,9 +222,12 @@ def goodnotes_name(course, filename, updated=False):
 
 
 def strip_prefix(name):
-    """('reinforcement_learning', 'Lecture05') for 'RL · Lecture05' (also 'RL - …', 'RL: …'), else (None, name)."""
+    """('reinforcement_learning', 'Lecture05') for 'RL · Lecture05' (also 'RL - …', 'RL: …'), else (None, name).
+
+    '_' or a dash without spaces is part of a name ('RL_emai_26_1', 'AS-Theory'), not a separator.
+    """
     for course in course_folders():
-        m = re.match(rf"^\s*{re.escape(course_prefix(course))}\s*[·•\-–—:_|]\s*(.+)$", name)
+        m = re.match(rf"^\s*{re.escape(course_prefix(course))}(?:\s*[·•:|]\s*|\s+[-–—]\s+)(.+)$", name)
         if m:
             return course, m.group(1).strip()
     return None, name
