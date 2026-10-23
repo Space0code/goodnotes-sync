@@ -38,6 +38,7 @@ import tempfile
 import time
 import traceback
 import urllib.request
+import zipfile
 from email.message import EmailMessage
 from zoneinfo import ZoneInfo
 
@@ -630,6 +631,86 @@ def export_changed(state, dry=False):
     return written
 
 
+# ---------------------------------------------------------------- seed (one-off: existing notebooks)
+def notebook_key(name):
+    """'Extra1-emotions.pdf.pdf', 'Extra1-emotions.pdf' and 'Extra1-emotions.pdf.goodnotes' -> 'extra1-emotions'."""
+    name = re.sub(r"\.goodnotes$", "", name, flags=re.I)
+    return re.sub(r"(\.pdf)+$", "", name, flags=re.I).strip().casefold()
+
+
+def backup_layout(zip_path):
+    """notebook_key -> [library path without extension] from a Goodnotes backup zip (Settings › Export backup)."""
+    out = {}
+    with zipfile.ZipFile(zip_path) as z:
+        for n in z.namelist():
+            if n.lower().endswith(".goodnotes") and not n.startswith("."):
+                out.setdefault(notebook_key(os.path.basename(n)), []).append(n[:-len(".goodnotes")])
+    return out
+
+
+def library_path(rel, layout):
+    """Library path (no extension) of an exported PDF at `rel`, using the backup layout when given; None if
+    ambiguous (same name in several folders and the export's own folders don't tell which)."""
+    folders = [p for p in rel.split("/")[:-1] if p]
+    found = (layout or {}).get(notebook_key(os.path.basename(rel)), [])
+    if folders:  # keep candidates whose folders end with the export's folders
+        found = [c for c in found if [norm(p) for p in c.split("/")[:-1][-len(folders):]] ==
+                 [norm(p) for p in folders]] or found
+    if len(found) == 1:
+        return found[0]
+    if not found and not layout:
+        return re.sub(r"(\.pdf)+$", "", rel, flags=re.I)
+    return None
+
+
+def seed(source, state, layout_zip=None, dry=False):
+    """Place a Goodnotes PDF export (folder or zip) of existing notebooks into <course>/handwritten/ and register
+    each file under the path Auto Backup will use, so the first real backup of a notebook replaces it in place."""
+    exports = state.setdefault("exports", {})
+    layout = backup_layout(layout_zip) if layout_zip else None
+    placed, skipped = [], []
+    with tempfile.TemporaryDirectory(dir=staging()) as work:
+        root = source
+        if zipfile.is_zipfile(source):
+            root = os.path.join(work, "export")
+            with zipfile.ZipFile(source) as z:
+                for n in z.namelist():  # PDFs only, and never outside the temporary folder
+                    if n.lower().endswith(".pdf") and not n.startswith(("/", "__MACOSX")) and ".." not in n.split("/"):
+                        z.extract(n, root)
+        for dp, dns, fns in os.walk(root):
+            dns[:] = sorted(d for d in dns if not d.startswith("."))
+            for fn in sorted(f for f in fns if f.lower().endswith(".pdf") and not f.startswith(".")):
+                src = os.path.join(dp, fn)
+                rel = os.path.relpath(src, root).replace(os.sep, "/")
+                lib = library_path(rel, layout)
+                m = lib and map_remote(lib + ".pdf")
+                if not m:
+                    skipped.append(f"{rel} ({'no course' if lib else 'not found in layout / ambiguous'})")
+                    continue
+                key = lib + ".pdf"  # what Auto Backup will call it
+                if exports.get(key, {}).get("fingerprint", "seed") != "seed":
+                    skipped.append(f"{rel} (already exported from Auto Backup)")
+                    continue
+                dest = writable(handwritten_dest(*m), exports)
+                drel = os.path.relpath(dest, MATERIALS)
+                if dry:
+                    print(f"  would place {rel}  ->  {drel}")
+                    placed.append(drel)
+                    continue
+                pdf = compress_pdf(src, work, name="seed.pdf") if COMPRESS else src
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                shutil.copyfile(pdf, dest + ".part")
+                os.replace(dest + ".part", dest)
+                exports[key] = {"fingerprint": "seed", "md5": file_hash(dest, "md5"), "size": os.path.getsize(dest),
+                                "dest": drel, "time": time.time()}
+                save_json(STATE, state)
+                placed.append(drel)
+    for s in skipped:
+        print(f"  skipped {s}")
+    print(f"{'would place' if dry else 'placed'} {len(placed)} notebooks; skipped {len(skipped)}")
+    return placed, skipped
+
+
 # ---------------------------------------------------------------- schedule
 def event_times(ics, prop):
     """Aware datetimes of `prop` (DTSTART/DTEND) of the timed events in an iCalendar feed."""
@@ -821,8 +902,11 @@ def status():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["tick", "import", "export", "status", "backfill", "test-import", "test-ntfy"])
-    ap.add_argument("arg", nargs="?", help="backfill: course folder; test-import: file")
+    ap.add_argument("cmd", choices=["tick", "import", "export", "status", "backfill", "seed", "test-import",
+                                    "test-ntfy"])
+    ap.add_argument("arg", nargs="?", help="backfill: course folder; seed: PDF export (folder or zip); "
+                                           "test-import: file")
+    ap.add_argument("--layout", help="seed: Goodnotes backup zip, to find each notebook's folders")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("-v", "--verbose", action="store_true")
     a = ap.parse_args()
@@ -848,6 +932,10 @@ def main():
             import_new(work, dry=a.dry_run, only_course=a.arg)
         elif a.cmd == "export":
             export_changed(work, dry=True) if a.dry_run else run_export(work)
+        elif a.cmd == "seed":
+            if not a.arg or not os.path.exists(a.arg):
+                raise SystemExit("seed needs a Goodnotes PDF export (folder or zip)")
+            seed(os.path.abspath(a.arg), work, a.layout and os.path.abspath(a.layout), dry=a.dry_run)
         elif a.cmd == "test-import":
             path = os.path.abspath(a.arg or "")
             rel = os.path.relpath(path, MATERIALS)

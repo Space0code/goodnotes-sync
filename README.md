@@ -108,6 +108,11 @@ goodnotes_sync.py status                       courses, pending imports, noteboo
 goodnotes_sync.py import [--dry-run]           import new files now
 goodnotes_sync.py export [--dry-run]           pull changed notebooks now
 goodnotes_sync.py backfill COURSE [--dry-run]  also import a course's files from before the first run
+goodnotes_sync.py seed EXPORT [--layout BACKUP.zip] [--dry-run]
+                                               place a Goodnotes PDF export (folder or zip) of notebooks that
+                                               Auto Backup hasn't uploaded yet into <course>/handwritten/; the
+                                               backup zip (Settings › Export backup) supplies each notebook's
+                                               folders. Later Auto Backup uploads replace them in place.
 goodnotes_sync.py test-import FILE             email one file to Goodnotes
 goodnotes_sync.py test-ntfy                    send a test push
 goodnotes_sync.py tick                         what launchd runs every 5 min

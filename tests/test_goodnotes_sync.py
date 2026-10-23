@@ -343,6 +343,67 @@ class Exports(Base):
                     self.assertIn(os.sep + "handwritten" + os.sep, p)
 
 
+class Seed(Base):
+    """Placing a one-off Goodnotes PDF export of existing notebooks."""
+
+    def setUp(self):
+        super().setUp()
+        self.layout = os.path.join(self.tmp.name, "Backup.zip")
+        with G.zipfile.ZipFile(self.layout, "w") as z:
+            for n in ["EMAI/Reinforcement Learning/Intro.goodnotes", "EMAI/Autonomous Systems/Intro.goodnotes",
+                      "EMAI/Symbolic Reasoning/HW/HW1/HW1.goodnotes", "EMAI/Symbolic Reasoning/02_folguide.pdf.goodnotes",
+                      "Random/Diary.goodnotes", ".goodnotesmeta/x.goodnotes"]:
+                z.writestr(n, b"zip of a notebook")
+        self.export = os.path.join(self.tmp.name, "export")
+
+    def add(self, rel, data=b"%PDF ink"):
+        p = os.path.join(self.export, rel)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "wb") as f:
+            f.write(data)
+
+    def test_flat_export_uses_backup_layout(self):
+        self.add("HW1.pdf")
+        self.add("02_folguide.pdf.pdf")
+        self.add("Intro.pdf")                                              # ambiguous: two courses
+        self.add("Diary.pdf")                                              # no course
+        state = {}
+        placed, skipped = G.seed(self.export, state, self.layout)
+        self.assertEqual(sorted(placed), ["symbolic_reasoning/handwritten/02_folguide.pdf",
+                                          "symbolic_reasoning/handwritten/HW/HW1/HW1.pdf"])
+        self.assertEqual(len(skipped), 2)
+        self.assertIn("EMAI/Symbolic Reasoning/02_folguide.pdf.pdf", state["exports"])
+
+    def test_export_folders_disambiguate(self):
+        self.add("EMAI/Reinforcement Learning/Intro.pdf", b"rl")
+        self.add("EMAI/Autonomous Systems/Intro.pdf", b"as")
+        state = {}
+        placed, _ = G.seed(self.export, state, self.layout)
+        self.assertEqual(sorted(placed), ["autonomous_systems/handwritten/Intro.pdf",
+                                          "reinforcement_learning/handwritten/Intro.pdf"])
+        self.assertEqual(read(os.path.join(self.materials, "reinforcement_learning/handwritten/Intro.pdf")), b"rl")
+
+    def test_zip_export_and_later_backup_replaces_in_place(self):
+        z = os.path.join(self.tmp.name, "export.zip")
+        with G.zipfile.ZipFile(z, "w") as zf:
+            zf.writestr("EMAI/Reinforcement Learning/Intro.pdf", b"seeded")
+            zf.writestr("../evil.pdf", b"x")
+        state = {}
+        placed, _ = G.seed(z, state, self.layout)
+        self.assertEqual(placed, ["reinforcement_learning/handwritten/Intro.pdf"])
+        self.assertFalse(os.path.exists(os.path.join(self.tmp.name, "evil.pdf")))
+
+        def fetch(path, tmp):
+            with open(tmp, "wb") as f:
+                f.write(b"from auto backup")
+        listing = [{"Path": "EMAI/Reinforcement Learning/Intro.pdf", "Size": 16, "ModTime": "2026-10-24T10:00:00+00:00"}]
+        self.patch(remote_listing=lambda: listing, fetch=fetch)
+        self.assertEqual(G.export_changed(state), ["reinforcement_learning/handwritten/Intro.pdf"])
+        self.assertEqual(os.listdir(os.path.join(self.materials, "reinforcement_learning/handwritten")), ["Intro.pdf"])
+        self.assertEqual(read(os.path.join(self.materials, "reinforcement_learning/handwritten/Intro.pdf")),
+                         b"from auto backup")
+
+
 class LocalDriveBackup(Base):
     """Reading Goodnotes Auto Backup from Google Drive for desktop's folder, without patched listing/fetch."""
 
