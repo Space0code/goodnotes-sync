@@ -32,9 +32,9 @@ if [ ! -x "$APP/goodnotes-sync" ] || ! cmp -s "$SRC/launcher.c" "$APP/launcher.c
   cp "$SRC/launcher.c" "$APP/launcher.c"
   echo "built $APP/goodnotes-sync (allow its iCloud Drive access prompt, see README step 5)"
 fi
-sed -e "s|__APP__|$APP|g" -e "s|__HOME__|$HOME|g" "$SRC/launchd/$LABEL.plist" > "$PLIST"
+/usr/bin/python3 -I "$SRC/launchd/render_plist.py" "$SRC/launchd/$LABEL.plist" "$BASE/settings.json" "$APP" "$HOME" > "$PLIST"
 plutil -lint "$PLIST" >/dev/null
 launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
-echo "installed: $APP; agent $LABEL loaded (imports every 5 min, exports after lectures and at export_times)"
+echo "installed: $APP; agent $LABEL loaded (runs after each aula-sync sync and in the daytime slots; nothing at night)"
 echo "First install: click Allow when macOS asks whether goodnotes-sync may access iCloud Drive (README step 5)."

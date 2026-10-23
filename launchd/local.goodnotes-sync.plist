@@ -9,10 +9,15 @@
     <string>__APP__/goodnotes-sync</string>
     <string>tick</string>
   </array>
-  <!-- tick every 5 min: imports new files right away; exports only when due (after lectures, export_times).
-       A tick missed while asleep fires once on wake; RunAtLoad covers login -->
-  <key>StartInterval</key>
-  <integer>300</integer>
+  <!-- install.sh fills in: daytime slots (active_hours, every check_every_minutes; a slot missed while asleep
+       runs once on wake) that export when due (after lectures, export_times) and pick up new files, plus
+       WatchPaths on aula-sync's state.json, so new downloads are imported right after aula-sync syncs.
+       Nothing runs at night. RunAtLoad covers login. -->
+  <key>StartCalendarInterval</key>
+  <array>
+__CALENDAR__
+  </array>
+__WATCH__
   <key>RunAtLoad</key>
   <true/>
   <key>ProcessType</key>
