@@ -336,6 +336,58 @@ class Exports(Base):
                     self.assertIn(os.sep + "handwritten" + os.sep, p)
 
 
+class LocalDriveBackup(Base):
+    """Reading Goodnotes Auto Backup from Google Drive for desktop's folder, without patched listing/fetch."""
+
+    def setUp(self):
+        super().setUp()
+        self.cloud = os.path.join(self.tmp.name, "CloudStorage")
+        os.makedirs(self.cloud)
+        self.patch(CLOUD_STORAGE=self.cloud, BACKUP_FOLDER="")
+
+    def backup(self, rel, data, mtime=1_800_000_000):
+        p = os.path.join(self.cloud, "GoogleDrive-me@gmail.com", "Moja mapa", "Goodnotes", rel)  # localised My Drive
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "wb") as f:
+            f.write(data)
+        os.utime(p, (mtime, mtime))
+        return p
+
+    def test_not_set_up(self):
+        with self.assertRaises(G.BackupUnavailable):
+            G.backup_folder()
+
+    def test_signed_in_but_nothing_backed_up(self):
+        os.makedirs(os.path.join(self.cloud, "GoogleDrive-me@gmail.com", "My Drive"))
+        self.assertIsNone(G.backup_folder())
+        self.assertEqual(G.remote_listing(), [])
+
+    def test_listing_and_export(self):
+        self.backup("EMAI/Reinforcement learning/Lectures/RL · L5.pdf", b"ink v1")
+        self.backup("EMAI/Reinforcement learning/Lectures/RL · L5.goodnotes", b"not a pdf")
+        self.backup("Personal/Diary.pdf", b"private")
+        listing = G.remote_listing()
+        self.assertEqual(sorted(e["Path"] for e in listing),
+                         ["EMAI/Reinforcement learning/Lectures/RL · L5.pdf", "Personal/Diary.pdf"])
+        state = {}
+        self.assertEqual(G.export_changed(state), ["reinforcement_learning/handwritten/Lectures/L5.pdf"])
+        dest = os.path.join(self.materials, "reinforcement_learning/handwritten/Lectures/L5.pdf")
+        self.assertEqual(read(dest), b"ink v1")
+        self.assertEqual(G.export_changed(state), [])                      # unchanged size and date
+        self.backup("EMAI/Reinforcement learning/Lectures/RL · L5.pdf", b"ink v2, more", mtime=1_800_000_900)
+        self.assertEqual(G.export_changed(state), ["reinforcement_learning/handwritten/Lectures/L5.pdf"])
+        self.assertEqual(read(dest), b"ink v2, more")
+
+    def test_move_in_goodnotes_moves_the_file(self):
+        old = self.backup("RL · L6.pdf", b"ink")
+        state = {}
+        G.export_changed(state)
+        os.makedirs(os.path.join(os.path.dirname(old), "EMAI", "Reinforcement learning"))
+        os.rename(old, os.path.join(os.path.dirname(old), "EMAI", "Reinforcement learning", "RL · L6.pdf"))
+        self.assertEqual(G.export_changed(state), ["reinforcement_learning/handwritten/L6.pdf"])
+        self.assertEqual(list(state["exports"]), ["EMAI/Reinforcement learning/RL · L6.pdf"])
+
+
 @unittest.skipUnless(G.shutil.which("gs", path="/opt/homebrew/bin:/usr/local/bin"), "ghostscript not installed")
 class Compression(unittest.TestCase):
     def setUp(self):

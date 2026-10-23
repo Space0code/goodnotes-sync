@@ -3,7 +3,8 @@
 
   in:  new slides/exercises in <materials>/<course>/ are emailed to your "Email to Goodnotes" address, so they
        show up in Goodnotes as "RL · Lecture05" (PowerPoint files are converted to PDF first).
-  out: Goodnotes Auto Backup (PDF format, Google Drive) is read with rclone; every notebook that belongs to a
+  out: Goodnotes Auto Backup (PDF format, Google Drive) is read through Google Drive for desktop's local folder
+       (no API credentials, nothing expires); every notebook that belongs to a
        course is written to <materials>/<course>/handwritten/<name>.pdf and replaced in place when it changes.
 
 Usage:
@@ -20,6 +21,7 @@ import contextlib
 import datetime as dt
 import email.utils
 import fcntl
+import glob
 import hashlib
 import json
 import logging
@@ -80,7 +82,11 @@ IMPORT_EXT = {"pdf", "ppt", "pptx", "pps", "ppsx"}
 ONLY_AUTO = SETTINGS.get("only_auto_files", True)  # only files aula-sync wrote (*_auto.*), not your own copies
 SEP = SETTINGS.get("name_separator", " · ")
 HANDWRITTEN = SETTINGS.get("handwritten_folder", "handwritten")
-REMOTE = SETTINGS.get("rclone_remote", "gdrive:Goodnotes")
+# Goodnotes Auto Backup goes to Google Drive; Google Drive for desktop shows it in CLOUD_STORAGE, so no API
+# credentials are needed. backup_folder overrides the auto-detected <account>/My Drive/<backup_folder_name>.
+CLOUD_STORAGE = os.path.join(HOME, "Library/CloudStorage")
+BACKUP_FOLDER = SETTINGS.get("backup_folder", "")
+BACKUP_NAME = SETTINGS.get("backup_folder_name", "Goodnotes")
 CALENDAR_URL = SETTINGS.get("calendar_url") or load_json(AULA_SETTINGS, {}).get("calendar_url", "")
 AFTER_LECTURE = SETTINGS.get("export_after_lecture_minutes", [15, 60])
 EXPORT_TIMES = SETTINGS.get("export_times", ["20:00"])
@@ -430,27 +436,51 @@ def import_new(state, dry=False, only_course=None):
 
 
 # ---------------------------------------------------------------- export (Goodnotes Auto Backup -> materials)
-def rclone(*args, timeout=600):
-    r = subprocess.run([tool("rclone"), *args], capture_output=True, text=True, timeout=timeout)
-    if r.returncode != 0:
-        raise RuntimeError(f"rclone {args[0]} failed: {r.stderr.strip()[-1500:]}")
-    return r.stdout
+class BackupUnavailable(Exception):
+    pass
+
+
+def backup_folder():
+    """The Auto Backup folder as Google Drive for desktop shows it, or None if nothing is backed up yet.
+
+    Raises BackupUnavailable when Google Drive for desktop isn't installed and signed in.
+    """
+    if BACKUP_FOLDER:
+        path = os.path.expanduser(BACKUP_FOLDER)
+        return path if os.path.isdir(path) else None
+    accounts = sorted(glob.glob(os.path.join(CLOUD_STORAGE, "GoogleDrive-*")))
+    if not accounts:
+        raise BackupUnavailable("Google Drive for desktop is not set up: install it (brew install --cask "
+                                "google-drive), open it and sign in with the Google account Goodnotes backs up to.")
+    for account in accounts:  # <account>/<"My Drive", localised>/Goodnotes
+        for path in sorted(glob.glob(os.path.join(account, "*", BACKUP_NAME))):
+            if os.path.isdir(path):
+                return path
+    return None
 
 
 def remote_listing():
-    """PDFs in the Auto Backup folder: [{"Path", "Size", "ModTime", "Hashes": {"md5"}}]."""
-    try:
-        out = rclone("lsjson", "-R", "--files-only", "--hash", "--hash-type", "md5", REMOTE)
-    except RuntimeError as e:
-        if "directory not found" in str(e):  # Auto Backup hasn't uploaded anything yet
-            log.info("%s does not exist yet: nothing backed up", REMOTE)
-            return []
-        raise
-    return [e for e in json.loads(out or "[]") if e["Path"].lower().endswith(".pdf")]
+    """PDFs in the Auto Backup folder: [{"Path", "Size", "ModTime"}], Path relative and '/'-separated."""
+    root = backup_folder()
+    if not root:
+        log.info("no '%s' folder in Google Drive yet: nothing backed up", BACKUP_NAME)
+        return []
+    out = []
+    for dp, dns, fns in os.walk(root, onerror=_walk_error):
+        dns[:] = sorted(d for d in dns if not d.startswith("."))
+        for fn in sorted(fns):
+            if fn.startswith(".") or not fn.lower().endswith(".pdf"):
+                continue
+            p = os.path.join(dp, fn)
+            st = os.stat(p)  # placeholders of not-yet-downloaded files report their real size and date
+            out.append({"Path": os.path.relpath(p, root).replace(os.sep, "/"), "Size": st.st_size,
+                        "ModTime": dt.datetime.fromtimestamp(st.st_mtime, dt.timezone.utc).isoformat()})
+    return out
 
 
 def fetch(remote_path, tmp):
-    rclone("copyto", f"{REMOTE.rstrip('/')}/{remote_path}", tmp, timeout=1800)
+    """Copy a backed-up PDF; Google Drive for desktop downloads it first if it is only streamed."""
+    shutil.copyfile(os.path.join(backup_folder(), *remote_path.split("/")), tmp)
 
 
 def fingerprint(entry):
@@ -690,20 +720,15 @@ def check_config():
         raise SystemExit(f"no courses configured in {SETTINGS_FILE}")
 
 
-def remote_ready():
-    try:
-        return REMOTE.split(":")[0] + ":" in rclone("listremotes", timeout=30).split()
-    except Exception:
-        return False
-
-
 def run_export(state):
-    if not remote_ready():
-        alert(state, "rclone", f"rclone remote '{REMOTE}' is not configured. Run in Terminal:\n"
-                               f"rclone config create {REMOTE.split(':')[0]} drive scope=drive.readonly")
-        return
     try:
         export_changed(state)
+    except BackupUnavailable as e:
+        alert(state, "drive", str(e))
+    except PermissionError as e:
+        alert(state, "drive", f"macOS blocks the background agent from Google Drive ({e.filename}).\nAllow it: "
+                              f"System Settings → Privacy & Security → Files & Folders → goodnotes-sync → Google "
+                              f"Drive (or add {os.path.join(APP_DIR, 'app', 'goodnotes-sync')} to Full Disk Access).")
     except Exception as e:
         alert(state, "export", f"Export from the Goodnotes backup failed:\n{e}\n\n{traceback.format_exc()[-1500:]}")
 
@@ -752,10 +777,13 @@ def status():
     print(f"\npending imports: {len(pend)}{note}")
     for _, rel, *_ in pend:
         print(f"  {rel}")
-    print(f"\nGoodnotes backup ({REMOTE}):")
-    if not remote_ready():
-        print("  rclone remote not configured")
-    else:
+    try:
+        root = backup_folder()
+        print(f"\nGoodnotes backup ({root or 'no ' + BACKUP_NAME + ' folder in Google Drive yet'}):")
+    except BackupUnavailable as e:
+        root = None
+        print(f"\nGoodnotes backup: {e}")
+    if root:
         listing = remote_listing()
         todo, unmapped = plan_export(listing, json.loads(json.dumps(state)))
         changed = {e["Path"]: d for e, _, d in todo}

@@ -12,7 +12,7 @@ Aula Global ──aula-sync──▶ materials/RL/lectures/L5_auto.pdf          
                      Gmail ──▶ Email to Goodnotes ──▶ Goodnotes: "RL · L5"   ✍️ you write on the iPad
                                                             │ Auto Backup (PDF)
                                                             ▼
-materials/RL/handwritten/L5.pdf ◀──rclone (changed only)── Google Drive /Goodnotes
+materials/RL/handwritten/L5.pdf ◀──(changed only)── Google Drive for desktop: My Drive/Goodnotes
              after each lecture (+15, +60 min) and daily at 20:00
 ```
 
@@ -22,7 +22,9 @@ Goodnotes has no export API: its Shortcuts actions can create notebooks, add pag
 | Direction | Goodnotes feature | What this tool does |
 |---|---|---|
 | into Goodnotes | **Email to Goodnotes**: PDFs mailed to your personal `…@goodnotes.email` address are imported | sends new files from your Gmail via SMTP (app password in Keychain) |
-| out of Goodnotes | **Auto Backup** (iPad only): uploads a PDF of every notebook to Google Drive whenever it changes, mirroring your folders | lists the backup with rclone (read-only), compares MD5 checksums, and downloads only changed notebooks |
+| out of Goodnotes | **Auto Backup** (iPad only): uploads a PDF of every notebook to Google Drive whenever it changes, mirroring your folders | reads the backup through Google Drive for desktop's local folder, and copies only notebooks whose size or modification time changed |
+
+Google Drive is read through Google's own desktop app, not the Drive API. Its sign-in doesn't expire, and there's no OAuth client to create or renew; rclone's shared client ID is being retired in 2026, and a self-made one in "Testing" mode needs signing in again every week.
 
 ## Which notebook goes where
 A notebook belongs to a course when:
@@ -44,8 +46,8 @@ Notebooks that match neither rule (personal notebooks, for example) are never do
 
 ## Requirements
 - macOS with the Xcode Command Line Tools (`/usr/bin/python3` 3.9+, standard library only, and `cc` to build the launcher).
-- `brew install rclone ghostscript`.
-- Google Drive access through your own OAuth client ID: rclone's shared client ID is being retired during 2026. See [rclone: making your own client_id](https://rclone.org/drive/#making-your-own-client-id), and **publish** the app; in "Testing" mode the sign-in expires every 7 days.
+- `brew install ghostscript`.
+- [Google Drive for desktop](https://www.google.com/drive/download/) (`brew install --cask google-drive`), signed in with the Google account Goodnotes backs up to. The default "Stream files" mode is fine.
 - Microsoft PowerPoint, only for `.ppt`, `.pptx`, `.pps` and `.ppsx` files. It is opened in the background for the conversion and closed again.
 - A Goodnotes plan that includes Email to Goodnotes, and Goodnotes on an iPad (Auto Backup isn't available on the Mac).
 - A Gmail account with an app password in Keychain (the same item aula-sync uses, `aula-sync-gmail`). Optional: an ntfy topic (`aula-sync-ntfy`) for push notifications; without one, notifications go to your Gmail.
@@ -54,9 +56,9 @@ Notebooks that match neither rule (personal notebooks, for example) are never do
 1. **iPad, Goodnotes → Settings → Email to Goodnotes:** turn it on and copy your address.
 2. **iPad, Goodnotes → Settings → Cloud & Backup → Auto Backup:** turn it on, choose **Google Drive**, set the file format to **PDF only** and keep the folder name **Goodnotes**. Keep the app open until the first full upload finishes. Keep iCloud sync on as well.
    - Why PDF only: this tool needs PDFs, and the Goodnotes format can't be read outside Goodnotes. Your editable library is already in iCloud sync. Backing up both formats would roughly double Drive space and upload time for no gain here.
-3. **Mac: give rclone read-only access to Google Drive** (a browser window opens for the Google sign-in):
+3. **Mac: install Google Drive for desktop and sign in once** (the installer asks for your Mac password):
    ```bash
-   rclone config create gdrive drive scope=drive.readonly
+   brew install --cask google-drive && open -a "Google Drive"
    ```
 4. **Mac: install:**
    ```bash
@@ -64,7 +66,7 @@ Notebooks that match neither rule (personal notebooks, for example) are never do
    ./install.sh   # first run creates ~/Library/Application Support/goodnotes-sync/settings.json
    ```
    Edit the settings (below) and run `./install.sh` again. It builds a small launcher binary and loads a launchd agent that runs it every 5 minutes.
-5. **Mac: let the agent into iCloud Drive.** macOS keeps background jobs out of `~/Library/Mobile Documents` until you allow them. Right after installing, a dialog appears: *"goodnotes-sync" would like to access files in iCloud Drive*. Click **Allow**. The permission belongs to the small launcher binary only, not to Python as a whole. If you missed or declined the dialog, turn it on under System Settings → Privacy & Security → Files & Folders → goodnotes-sync → iCloud Drive. Alternatively, add the launcher to Full Disk Access:
+5. **Mac: let the agent into iCloud Drive.** macOS keeps background jobs out of `~/Library/Mobile Documents` until you allow them. Right after installing, a dialog appears: *"goodnotes-sync" would like to access files in iCloud Drive*. Click **Allow**. A second dialog asks the same for **Google Drive**; allow that too. The permission belongs to the small launcher binary only, not to Python as a whole. If you missed or declined the dialog, turn it on under System Settings → Privacy & Security → Files & Folders → goodnotes-sync → iCloud Drive. Alternatively, add the launcher to Full Disk Access:
    ```bash
    open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
    open -R ~/Library/Application\ Support/goodnotes-sync/app/goodnotes-sync   # drag it into the list
@@ -89,7 +91,8 @@ The first time a PowerPoint file needs converting, macOS may ask whether `goodno
 | `courses` | `{"<folder>": {"prefix": "RL", "goodnotes_folders": ["Reinforcement learning"], "exclude": false}}` | — |
 | `import_folders` | subfolders of a course whose files are imported | `["slides", "lectures", "exercises"]` |
 | `only_auto_files` | import only files aula-sync wrote (`*_auto.*`), not your own copies | `true` |
-| `rclone_remote` | rclone path of the Auto Backup folder | `"gdrive:Goodnotes"` |
+| `backup_folder` | local path of the Auto Backup folder; empty = auto-detect `~/Library/CloudStorage/GoogleDrive-*/My Drive/<backup_folder_name>` | `""` |
+| `backup_folder_name` | the folder name set in Goodnotes' Auto Backup | `"Goodnotes"` |
 | `export_after_lecture_minutes` | export this many minutes after each lecture ends | `[15, 60]` |
 | `export_times` | daily export times (local) | `["20:00"]` |
 | `calendar_url` | iCalendar feed of your lectures; defaults to aula-sync's `calendar_url` | aula-sync's |

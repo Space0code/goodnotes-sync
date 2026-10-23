@@ -20,9 +20,9 @@ if grep -q '"you@gmail.com"' "$BASE/settings.json"; then
   echo "Edit $BASE/settings.json first (gmail is still the example), then re-run ./install.sh"
   exit 1
 fi
-for t in rclone gs; do
-  PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" command -v "$t" >/dev/null || echo "warning: $t not found (brew install rclone ghostscript)"
-done
+PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" command -v gs >/dev/null || echo "warning: gs not found (brew install ghostscript)"
+ls -d "$HOME"/Library/CloudStorage/GoogleDrive-* >/dev/null 2>&1 ||
+  echo "warning: Google Drive for desktop is not set up (brew install --cask google-drive, then sign in)"
 
 cp "$SRC/goodnotes_sync.py" "$APP/"
 # The launcher is what you grant Full Disk Access to. It is rebuilt only when launcher.c changes, because
