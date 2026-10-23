@@ -880,6 +880,9 @@ def tick():
                                    f"Disk Access).")
             save_json(STATE, state)
             return
+        except OSError as e:  # e.g. interrupted while iCloud is busy: try again at the next tick
+            log.warning("cannot read %s now: %s", MATERIALS, e)
+            return
         if not online():
             return
         try:

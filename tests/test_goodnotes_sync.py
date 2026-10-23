@@ -350,6 +350,20 @@ class Exports(Base):
                     self.assertIn(os.sep + "handwritten" + os.sep, p)
 
 
+class Tick(Base):
+    def test_transient_read_error_skips_the_tick(self):
+        def interrupted(path):
+            raise InterruptedError(4, "Interrupted system call", path)
+        self.patch(APP_DIR=self.tmp.name, LOCK=os.path.join(self.tmp.name, "lock"),
+                   import_new=lambda *a, **k: self.fail("must not run"))
+        real = G.os.listdir
+        G.os.listdir = interrupted
+        try:
+            G.tick()  # no exception
+        finally:
+            G.os.listdir = real
+
+
 class Seed(Base):
     """Placing a one-off Goodnotes PDF export of existing notebooks."""
 
