@@ -6,7 +6,7 @@
   "reinforcement_learning": {"prefix": "RL", "goodnotes_folders": ["Reinforcement learning"]},
   "symbolic_reasoning": {"prefix": "SR", "goodnotes_folders": ["Symbolic reasoning"]}
  },
- "import_folders": ["slides", "lectures", "exercises"],
+ "import_folders": ["slides", "exercises", "assignments"],
  "export_after_lecture_minutes": [15, 60],
  "export_times": ["20:00"],
  "calendar_url": "",

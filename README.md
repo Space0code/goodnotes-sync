@@ -2,11 +2,11 @@
 
 Unattended two-way bridge between your course folder in iCloud Drive and **Goodnotes** on the iPad:
 
-- **In:** every new slide deck or exercise sheet that lands in `<materials>/<course>/` (for example from [aula-sync](https://github.com/Space0code/aula-sync)) is imported into Goodnotes automatically, named `RL · Lecture05`. PowerPoint files are converted to PDF first.
+- **In:** every new slide deck, assignment or exercise sheet that lands in `<materials>/<course>/` (for example from [aula-sync](https://github.com/Space0code/aula-sync)) is imported into Goodnotes automatically, named `RL · Lecture05`. PowerPoint files are converted to PDF first.
 - **Out:** your annotated notebooks come back as PDFs in `<materials>/<course>/handwritten/<name>.pdf`, after every lecture and every evening at 20:00. Only notebooks that changed are downloaded, and each one replaces its previous version in place, so large handwritten PDFs never pile up as copies.
 
 ```
-Aula Global ──aula-sync──▶ materials/RL/lectures/L5_auto.pdf          (originals, never touched)
+Aula Global ──aula-sync──▶ materials/RL/slides/L5_auto.pdf            (originals, never touched)
                                    │ new file (checked right after each aula-sync sync)
                                    ▼
                      Gmail ──▶ Email to Goodnotes ──▶ Goodnotes: "RL · L5"   ✍️ you write on the iPad
@@ -99,7 +99,7 @@ The first time a PowerPoint file needs converting, macOS may ask whether `goodno
 | `goodnotes_email` | your Email to Goodnotes address; empty turns imports off | `""` |
 | `gmail` | Gmail address that sends the imports (and receives notifications if ntfy isn't set up) | — |
 | `courses` | `{"<folder>": {"prefix": "RL", "goodnotes_folders": ["Reinforcement learning"], "exclude": false}}` | — |
-| `import_folders` | subfolders of a course whose files are imported | `["slides", "lectures", "exercises"]` |
+| `import_folders` | subfolders of a course whose files are imported (files in their `submission/` and `feedback/` subfolders are skipped) | `["slides", "lectures", "exercises", "assignments"]` |
 | `only_auto_files` | import only files aula-sync wrote (`*_auto.*`), not your own copies | `true` |
 | `backup_folder` | local path of the Auto Backup folder; empty = auto-detect `~/Library/CloudStorage/GoogleDrive-*/My Drive/<backup_folder_name>` | `""` |
 | `backup_folder_name` | the folder name set in Goodnotes' Auto Backup | `"Goodnotes"` |

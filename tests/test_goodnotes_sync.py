@@ -133,17 +133,23 @@ class Dest(Base):
 
 class Imports(Base):
     def test_candidates(self):
-        self.write("reinforcement_learning/lectures/L1_auto.pdf")
-        self.write("reinforcement_learning/lectures/L1.pdf")             # your own copy: skipped
+        self.write("reinforcement_learning/slides/L1_auto.pdf")
+        self.write("reinforcement_learning/slides/L1.pdf")               # your own copy: skipped
         self.write("reinforcement_learning/slides/deck_auto.pptx")
         self.write("reinforcement_learning/exercises/sub/ex_auto.pdf")
+        self.write("reinforcement_learning/assignments/Lab1_auto.pdf")
+        self.write("reinforcement_learning/assignments/problem set 1/pset_auto.pdf")
+        self.write("reinforcement_learning/assignments/problem set 1/submission/answers_auto.pdf")  # your own work
+        self.write("reinforcement_learning/assignments/problem set 1/feedback/grade_auto.pdf")
         self.write("reinforcement_learning/code/nb_auto.ipynb")
         self.write("reinforcement_learning/readings/paper_auto.pdf")      # not an import folder
         self.write("reinforcement_learning/handwritten/x_auto.pdf")
         self.write("spanish/slides/T1_auto.pdf")                          # excluded course
         rels = sorted(r for _, r, _, _ in G.candidates())
-        self.assertEqual(rels, ["reinforcement_learning/exercises/sub/ex_auto.pdf",
-                                "reinforcement_learning/lectures/L1_auto.pdf",
+        self.assertEqual(rels, ["reinforcement_learning/assignments/Lab1_auto.pdf",
+                                "reinforcement_learning/assignments/problem set 1/pset_auto.pdf",
+                                "reinforcement_learning/exercises/sub/ex_auto.pdf",
+                                "reinforcement_learning/slides/L1_auto.pdf",
                                 "reinforcement_learning/slides/deck_auto.pptx"])
 
     def test_unreadable_folder_is_an_error_not_an_empty_baseline(self):
