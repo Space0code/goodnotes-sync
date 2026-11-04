@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Two-way bridge between a course-materials folder (e.g. filled by aula-sync) and Goodnotes.
 
-  in:  new slides/exercises in <materials>/<course>/ are emailed to your "Email to Goodnotes" address, so they
-       show up in Goodnotes as "RL · Lecture05" (PowerPoint files are converted to PDF first).
+  in:  new slides, assignments and exercises in <materials>/<course>/ are emailed to your "Email to Goodnotes"
+       address, so they show up in Goodnotes as "RL · Lecture05" (PowerPoint files are converted to PDF first).
   out: Goodnotes Auto Backup (PDF format, Google Drive) is read through Google Drive for desktop's local folder
        (no API credentials, nothing expires); every notebook that belongs to a
        course is written to <materials>/<course>/handwritten/<name>.pdf and replaced in place when it changes.
@@ -81,7 +81,10 @@ GMAIL_KEYCHAIN = SETTINGS.get("gmail_keychain_service", "aula-sync-gmail")
 NTFY_KEYCHAIN = SETTINGS.get("ntfy_keychain_service", "aula-sync-ntfy")
 # courses: {"<folder in materials>": {"prefix": "RL", "goodnotes_folders": ["Reinforcement learning"]}}
 COURSES = SETTINGS.get("courses", {})
-IMPORT_FOLDERS = SETTINGS.get("import_folders", ["slides", "lectures", "exercises"])
+IMPORT_FOLDERS = SETTINGS.get("import_folders", ["slides", "lectures", "exercises", "assignments"])  # "lectures": older layouts
+# inside an import folder, these hold your own work and the grader's feedback (aula-sync saves them under
+# assignments/<name>/): never imported
+SKIP_DIRS = {"submission", "feedback"}
 IMPORT_EXT = {"pdf", "ppt", "pptx", "pps", "ppsx"}
 ONLY_AUTO = SETTINGS.get("only_auto_files", True)  # only files aula-sync wrote (*_auto.*), not your own copies
 SEP = SETTINGS.get("name_separator", " · ")
@@ -279,7 +282,7 @@ def candidates(only_course=None):
             continue
         for sub in IMPORT_FOLDERS:
             for dp, dns, fns in os.walk(os.path.join(MATERIALS, course, sub), onerror=_walk_error):
-                dns[:] = sorted(d for d in dns if not d.startswith(".") and d != HANDWRITTEN)
+                dns[:] = sorted(d for d in dns if not d.startswith(".") and d != HANDWRITTEN and d not in SKIP_DIRS)
                 for fn in sorted(fns):
                     if fn.startswith(".") or ext_of(fn) not in IMPORT_EXT:
                         continue
